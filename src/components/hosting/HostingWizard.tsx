@@ -1,9 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { ProgressBar } from "./ProgressBar";
 import { NavigationFooter } from "./NavigationFooter";
+import { ListingPreview } from "./ListingPreview";
 import { PropertyTypeStep } from "./steps/PropertyTypeStep";
 import { PlaceTypeStep } from "./steps/PlaceTypeStep";
 import { LocationStep } from "./steps/LocationStep";
@@ -15,7 +18,6 @@ import { DescriptionStep } from "./steps/DescriptionStep";
 import { PricingStep } from "./steps/PricingStep";
 import { ReviewStep } from "./steps/ReviewStep";
 import { ListingData } from "@/types/listing";
-
 const TOTAL_STEPS = 10;
 const STORAGE_KEY = "hosting-wizard-progress";
 
@@ -66,6 +68,7 @@ export const HostingWizard = () => {
   const [isPublishing, setIsPublishing] = useState(false);
   const [direction, setDirection] = useState<"forward" | "backward">("forward");
   const [isAnimating, setIsAnimating] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const navigate = useNavigate();
 
   // Save progress to localStorage
@@ -241,6 +244,21 @@ export const HostingWizard = () => {
     <div className="min-h-screen bg-background flex flex-col">
       <ProgressBar currentStep={currentStep} totalSteps={TOTAL_STEPS} />
       
+      {/* Preview Button */}
+      {currentStep >= 6 && (
+        <div className="fixed top-20 right-6 z-40">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowPreview(true)}
+            className="gap-2 shadow-md"
+          >
+            <Eye className="h-4 w-4" />
+            Preview
+          </Button>
+        </div>
+      )}
+      
       <main className="flex-1 flex items-center justify-center py-12 pb-32 px-6 overflow-hidden">
         <div
           className={cn(
@@ -261,6 +279,12 @@ export const HostingWizard = () => {
         canGoNext={canProceed()}
         isLastStep={currentStep === TOTAL_STEPS}
         isLoading={isPublishing}
+      />
+
+      <ListingPreview
+        listing={listing}
+        isOpen={showPreview}
+        onClose={() => setShowPreview(false)}
       />
     </div>
   );
