@@ -175,11 +175,11 @@ export const HostingWizard = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <ProgressBar currentStep={currentStep} totalSteps={TOTAL_STEPS} />
       
-      <main className="pt-8 pb-28 px-6 md:px-12 lg:px-24">
-        <div className="max-w-screen-lg mx-auto">
+      <main className="flex-1 flex items-center justify-center py-12 pb-32 px-6">
+        <div className="w-full max-w-2xl">
           {renderStep()}
         </div>
       </main>
