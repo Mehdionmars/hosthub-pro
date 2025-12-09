@@ -1,9 +1,25 @@
 import { useState, useCallback, useRef } from "react";
-import { ImagePlus, X, Upload, Crop } from "lucide-react";
+import { ImagePlus, Upload } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ImageCropper } from "@/components/hosting/ImageCropper";
-import { optimizeImage, readFileAsDataURL } from "@/lib/imageUtils";
+import { SortablePhoto } from "@/components/hosting/SortablePhoto";
+import { optimizeImage } from "@/lib/imageUtils";
 import { toast } from "sonner";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+} from "@dnd-kit/sortable";
 
 interface PhotosStepProps {
   photos: string[];
@@ -16,6 +32,29 @@ export const PhotosStep = ({ photos, onUpdate }: PhotosStepProps) => {
   const [cropperIndex, setCropperIndex] = useState<number | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = photos.findIndex((_, i) => `photo-${i}` === active.id);
+      const newIndex = photos.findIndex((_, i) => `photo-${i}` === over.id);
+      const newPhotos = arrayMove(photos, oldIndex, newIndex);
+      onUpdate(newPhotos);
+      toast.success("Photos reordered");
+    }
+  };
 
   const processFiles = useCallback(
     async (files: FileList | File[]) => {
@@ -91,7 +130,7 @@ export const PhotosStep = ({ photos, onUpdate }: PhotosStepProps) => {
     toast.success("Photo removed");
   };
 
-  const openCropper = async (index: number) => {
+  const openCropper = (index: number) => {
     setCropperImage(photos[index]);
     setCropperIndex(index);
   };
@@ -111,13 +150,15 @@ export const PhotosStep = ({ photos, onUpdate }: PhotosStepProps) => {
     fileInputRef.current?.click();
   };
 
+  const photoIds = photos.map((_, i) => `photo-${i}`);
+
   return (
     <div className="animate-fade-in">
       <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-3">
         Add some photos of your place
       </h1>
       <p className="text-muted-foreground text-lg mb-10">
-        You'll need 5 photos to get started. You can add more or make changes later.
+        You'll need 5 photos to get started. Drag to reorder—first photo becomes the cover.
       </p>
 
       <input
@@ -165,96 +206,70 @@ export const PhotosStep = ({ photos, onUpdate }: PhotosStepProps) => {
             </div>
           </div>
         ) : (
-          <div className="space-y-4">
-            {/* Main photo */}
-            <div
-              className="relative aspect-[16/9] rounded-2xl overflow-hidden group"
-              onDragOver={handleDragOver}
-              onDragLeave={handleDragLeave}
-              onDrop={handleDrop}
-            >
-              <img
-                src={photos[0]}
-                alt="Cover photo"
-                className="w-full h-full object-cover"
-              />
-              <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/10 transition-colors" />
-              <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => openCropper(0)}
-                  className="w-8 h-8 rounded-full bg-background/90 flex items-center justify-center hover:bg-background transition-colors"
-                >
-                  <Crop className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={() => removePhoto(0)}
-                  className="w-8 h-8 rounded-full bg-background/90 flex items-center justify-center hover:bg-background transition-colors"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              </div>
-              <span className="absolute bottom-4 left-4 bg-background/90 px-3 py-1 rounded-full text-sm font-medium">
-                Cover photo
-              </span>
-            </div>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <SortableContext items={photoIds} strategy={rectSortingStrategy}>
+              <div className="space-y-4">
+                {/* Main photo */}
+                <SortablePhoto
+                  id="photo-0"
+                  photo={photos[0]}
+                  index={0}
+                  onRemove={() => removePhoto(0)}
+                  onCrop={() => openCropper(0)}
+                  isCover
+                />
 
-            {/* Photo grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              {photos.slice(1).map((photo, index) => (
+                {/* Photo grid */}
                 <div
-                  key={index}
-                  className="relative aspect-square rounded-xl overflow-hidden group"
-                >
-                  <img
-                    src={photo}
-                    alt={`Photo ${index + 2}`}
-                    className="w-full h-full object-cover"
-                  />
-                  <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/10 transition-colors" />
-                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => openCropper(index + 1)}
-                      className="w-7 h-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background transition-colors"
-                    >
-                      <Crop className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={() => removePhoto(index + 1)}
-                      className="w-7 h-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background transition-colors"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-
-              {photos.length < 10 && (
-                <button
-                  onClick={triggerFileInput}
+                  className="grid grid-cols-2 sm:grid-cols-4 gap-4"
                   onDragOver={handleDragOver}
                   onDragLeave={handleDragLeave}
                   onDrop={handleDrop}
-                  disabled={isProcessing}
-                  className={cn(
-                    "aspect-square rounded-xl border-2 border-dashed transition-all flex flex-col items-center justify-center gap-2",
-                    isDragging
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-foreground",
-                    isProcessing && "opacity-50 cursor-not-allowed"
-                  )}
                 >
-                  {isProcessing ? (
-                    <div className="w-6 h-6 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
-                  ) : (
-                    <ImagePlus className="w-6 h-6 text-muted-foreground" />
+                  {photos.slice(1).map((photo, index) => (
+                    <SortablePhoto
+                      key={`photo-${index + 1}`}
+                      id={`photo-${index + 1}`}
+                      photo={photo}
+                      index={index + 1}
+                      onRemove={() => removePhoto(index + 1)}
+                      onCrop={() => openCropper(index + 1)}
+                    />
+                  ))}
+
+                  {photos.length < 10 && (
+                    <button
+                      onClick={triggerFileInput}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      disabled={isProcessing}
+                      className={cn(
+                        "aspect-square rounded-xl border-2 border-dashed transition-all flex flex-col items-center justify-center gap-2",
+                        isDragging
+                          ? "border-primary bg-primary/5"
+                          : "border-border hover:border-foreground",
+                        isProcessing && "opacity-50 cursor-not-allowed"
+                      )}
+                    >
+                      {isProcessing ? (
+                        <div className="w-6 h-6 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                      ) : (
+                        <ImagePlus className="w-6 h-6 text-muted-foreground" />
+                      )}
+                      <span className="text-sm text-muted-foreground">
+                        {isProcessing ? "Processing..." : "Add more"}
+                      </span>
+                    </button>
                   )}
-                  <span className="text-sm text-muted-foreground">
-                    {isProcessing ? "Processing..." : "Add more"}
-                  </span>
-                </button>
-              )}
-            </div>
-          </div>
+                </div>
+              </div>
+            </SortableContext>
+          </DndContext>
         )}
 
         <p className="mt-6 text-sm text-muted-foreground">
