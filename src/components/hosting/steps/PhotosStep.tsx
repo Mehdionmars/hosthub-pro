@@ -1,32 +1,114 @@
-import { useState } from "react";
-import { ImagePlus, X, GripVertical } from "lucide-react";
+import { useState, useCallback, useRef } from "react";
+import { ImagePlus, X, Upload, Crop } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { ImageCropper } from "@/components/hosting/ImageCropper";
+import { optimizeImage, readFileAsDataURL } from "@/lib/imageUtils";
+import { toast } from "sonner";
 
 interface PhotosStepProps {
   photos: string[];
   onUpdate: (photos: string[]) => void;
 }
 
-const samplePhotos = [
-  "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=800&h=600&fit=crop",
-  "https://images.unsplash.com/photo-1560448204-e02f11c3d0e2?w=800&h=600&fit=crop",
-  "https://images.unsplash.com/photo-1560185893-a55cbc8c57e8?w=800&h=600&fit=crop",
-  "https://images.unsplash.com/photo-1484154218962-a197022b5858?w=800&h=600&fit=crop",
-  "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800&h=600&fit=crop",
-];
-
 export const PhotosStep = ({ photos, onUpdate }: PhotosStepProps) => {
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [cropperImage, setCropperImage] = useState<string | null>(null);
+  const [cropperIndex, setCropperIndex] = useState<number | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const addSamplePhoto = () => {
-    const availablePhotos = samplePhotos.filter(p => !photos.includes(p));
-    if (availablePhotos.length > 0) {
-      onUpdate([...photos, availablePhotos[0]]);
-    }
-  };
+  const processFiles = useCallback(
+    async (files: FileList | File[]) => {
+      const validFiles = Array.from(files).filter((file) => {
+        if (!file.type.startsWith("image/")) {
+          toast.error(`${file.name} is not an image`);
+          return false;
+        }
+        if (file.size > 10 * 1024 * 1024) {
+          toast.error(`${file.name} is too large (max 10MB)`);
+          return false;
+        }
+        return true;
+      });
+
+      if (validFiles.length === 0) return;
+
+      const remainingSlots = 10 - photos.length;
+      const filesToProcess = validFiles.slice(0, remainingSlots);
+
+      if (validFiles.length > remainingSlots) {
+        toast.warning(`Only ${remainingSlots} more photos can be added`);
+      }
+
+      setIsProcessing(true);
+      try {
+        const processedImages = await Promise.all(
+          filesToProcess.map((file) => optimizeImage(file, 1200, 0.85))
+        );
+        onUpdate([...photos, ...processedImages]);
+        toast.success(`${processedImages.length} photo(s) added`);
+      } catch (error) {
+        console.error("Error processing images:", error);
+        toast.error("Failed to process some images");
+      } finally {
+        setIsProcessing(false);
+      }
+    },
+    [photos, onUpdate]
+  );
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragging(false);
+  }, []);
+
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      processFiles(e.dataTransfer.files);
+    },
+    [processFiles]
+  );
+
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      if (e.target.files) {
+        processFiles(e.target.files);
+        e.target.value = "";
+      }
+    },
+    [processFiles]
+  );
 
   const removePhoto = (index: number) => {
     onUpdate(photos.filter((_, i) => i !== index));
+    toast.success("Photo removed");
+  };
+
+  const openCropper = async (index: number) => {
+    setCropperImage(photos[index]);
+    setCropperIndex(index);
+  };
+
+  const handleCropComplete = (croppedImage: string) => {
+    if (cropperIndex !== null) {
+      const newPhotos = [...photos];
+      newPhotos[cropperIndex] = croppedImage;
+      onUpdate(newPhotos);
+      toast.success("Photo cropped");
+    }
+    setCropperImage(null);
+    setCropperIndex(null);
+  };
+
+  const triggerFileInput = () => {
+    fileInputRef.current?.click();
   };
 
   return (
@@ -38,36 +120,79 @@ export const PhotosStep = ({ photos, onUpdate }: PhotosStepProps) => {
         You'll need 5 photos to get started. You can add more or make changes later.
       </p>
 
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={handleFileSelect}
+        className="hidden"
+      />
+
       <div className="max-w-4xl">
         {photos.length === 0 ? (
-          <button
-            onClick={addSamplePhoto}
-            className="w-full aspect-[16/9] rounded-2xl border-2 border-dashed border-border hover:border-foreground transition-colors flex flex-col items-center justify-center gap-4 bg-secondary/50"
+          <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            onClick={triggerFileInput}
+            className={cn(
+              "w-full aspect-[16/9] rounded-2xl border-2 border-dashed transition-all cursor-pointer flex flex-col items-center justify-center gap-4",
+              isDragging
+                ? "border-primary bg-primary/5 scale-[1.02]"
+                : "border-border hover:border-foreground bg-secondary/50"
+            )}
           >
-            <div className="w-16 h-16 rounded-full bg-secondary flex items-center justify-center">
-              <ImagePlus className="w-8 h-8 text-foreground" />
+            <div
+              className={cn(
+                "w-16 h-16 rounded-full flex items-center justify-center transition-colors",
+                isDragging ? "bg-primary/20" : "bg-secondary"
+              )}
+            >
+              {isProcessing ? (
+                <div className="w-8 h-8 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+              ) : (
+                <Upload className={cn("w-8 h-8", isDragging ? "text-primary" : "text-foreground")} />
+              )}
             </div>
             <div className="text-center">
-              <p className="font-semibold text-foreground">Add photos</p>
-              <p className="text-sm text-muted-foreground">Click to add sample photos</p>
+              <p className="font-semibold text-foreground">
+                {isProcessing ? "Processing..." : "Drag your photos here"}
+              </p>
+              <p className="text-sm text-muted-foreground">
+                or click to browse (JPG, PNG, WebP up to 10MB)
+              </p>
             </div>
-          </button>
+          </div>
         ) : (
           <div className="space-y-4">
             {/* Main photo */}
-            <div className="relative aspect-[16/9] rounded-2xl overflow-hidden group">
+            <div
+              className="relative aspect-[16/9] rounded-2xl overflow-hidden group"
+              onDragOver={handleDragOver}
+              onDragLeave={handleDragLeave}
+              onDrop={handleDrop}
+            >
               <img
                 src={photos[0]}
                 alt="Cover photo"
                 className="w-full h-full object-cover"
               />
               <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/10 transition-colors" />
-              <button
-                onClick={() => removePhoto(0)}
-                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-background/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => openCropper(0)}
+                  className="w-8 h-8 rounded-full bg-background/90 flex items-center justify-center hover:bg-background transition-colors"
+                >
+                  <Crop className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => removePhoto(0)}
+                  className="w-8 h-8 rounded-full bg-background/90 flex items-center justify-center hover:bg-background transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
               <span className="absolute bottom-4 left-4 bg-background/90 px-3 py-1 rounded-full text-sm font-medium">
                 Cover photo
               </span>
@@ -86,22 +211,46 @@ export const PhotosStep = ({ photos, onUpdate }: PhotosStepProps) => {
                     className="w-full h-full object-cover"
                   />
                   <div className="absolute inset-0 bg-foreground/0 group-hover:bg-foreground/10 transition-colors" />
-                  <button
-                    onClick={() => removePhoto(index + 1)}
-                    className="absolute top-2 right-2 w-7 h-7 rounded-full bg-background/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
+                  <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => openCropper(index + 1)}
+                      className="w-7 h-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background transition-colors"
+                    >
+                      <Crop className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => removePhoto(index + 1)}
+                      className="w-7 h-7 rounded-full bg-background/90 flex items-center justify-center hover:bg-background transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               ))}
 
-              {photos.length < 5 && (
+              {photos.length < 10 && (
                 <button
-                  onClick={addSamplePhoto}
-                  className="aspect-square rounded-xl border-2 border-dashed border-border hover:border-foreground transition-colors flex flex-col items-center justify-center gap-2"
+                  onClick={triggerFileInput}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  disabled={isProcessing}
+                  className={cn(
+                    "aspect-square rounded-xl border-2 border-dashed transition-all flex flex-col items-center justify-center gap-2",
+                    isDragging
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-foreground",
+                    isProcessing && "opacity-50 cursor-not-allowed"
+                  )}
                 >
-                  <ImagePlus className="w-6 h-6 text-muted-foreground" />
-                  <span className="text-sm text-muted-foreground">Add more</span>
+                  {isProcessing ? (
+                    <div className="w-6 h-6 border-2 border-muted-foreground/30 border-t-muted-foreground rounded-full animate-spin" />
+                  ) : (
+                    <ImagePlus className="w-6 h-6 text-muted-foreground" />
+                  )}
+                  <span className="text-sm text-muted-foreground">
+                    {isProcessing ? "Processing..." : "Add more"}
+                  </span>
                 </button>
               )}
             </div>
@@ -109,9 +258,22 @@ export const PhotosStep = ({ photos, onUpdate }: PhotosStepProps) => {
         )}
 
         <p className="mt-6 text-sm text-muted-foreground">
-          {photos.length}/5 photos added
+          {photos.length}/5 photos added {photos.length >= 5 && "✓"}
         </p>
       </div>
+
+      {cropperImage && (
+        <ImageCropper
+          image={cropperImage}
+          open={!!cropperImage}
+          onClose={() => {
+            setCropperImage(null);
+            setCropperIndex(null);
+          }}
+          onCropComplete={handleCropComplete}
+          aspectRatio={cropperIndex === 0 ? 16 / 9 : 1}
+        />
+      )}
     </div>
   );
 };
