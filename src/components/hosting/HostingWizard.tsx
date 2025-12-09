@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { ProgressBar } from "./ProgressBar";
 import { NavigationFooter } from "./NavigationFooter";
 import { PropertyTypeStep } from "./steps/PropertyTypeStep";
@@ -16,6 +17,7 @@ import { ReviewStep } from "./steps/ReviewStep";
 import { ListingData } from "@/types/listing";
 
 const TOTAL_STEPS = 10;
+const STORAGE_KEY = "hosting-wizard-progress";
 
 const initialListingData: ListingData = {
   propertyType: "",
@@ -41,11 +43,62 @@ const initialListingData: ListingData = {
   },
 };
 
+const loadSavedProgress = (): { step: number; listing: ListingData } | null => {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved);
+      return {
+        step: parsed.step || 1,
+        listing: { ...initialListingData, ...parsed.listing },
+      };
+    }
+  } catch (e) {
+    console.error("Failed to load saved progress:", e);
+  }
+  return null;
+};
+
 export const HostingWizard = () => {
-  const [currentStep, setCurrentStep] = useState(1);
-  const [listing, setListing] = useState<ListingData>(initialListingData);
+  const savedProgress = loadSavedProgress();
+  const [currentStep, setCurrentStep] = useState(savedProgress?.step || 1);
+  const [listing, setListing] = useState<ListingData>(savedProgress?.listing || initialListingData);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [direction, setDirection] = useState<"forward" | "backward">("forward");
+  const [isAnimating, setIsAnimating] = useState(false);
   const navigate = useNavigate();
+
+  // Save progress to localStorage
+  useEffect(() => {
+    const saveProgress = () => {
+      try {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ step: currentStep, listing })
+        );
+      } catch (e) {
+        console.error("Failed to save progress:", e);
+      }
+    };
+    saveProgress();
+  }, [currentStep, listing]);
+
+  // Show resume notification on mount
+  useEffect(() => {
+    if (savedProgress && savedProgress.step > 1) {
+      toast.info("Welcome back!", {
+        description: `Resuming from step ${savedProgress.step} of ${TOTAL_STEPS}`,
+        action: {
+          label: "Start over",
+          onClick: () => {
+            localStorage.removeItem(STORAGE_KEY);
+            setCurrentStep(1);
+            setListing(initialListingData);
+          },
+        },
+      });
+    }
+  }, []);
 
   const canProceed = (): boolean => {
     switch (currentStep) {
@@ -58,7 +111,7 @@ export const HostingWizard = () => {
       case 4:
         return listing.basics.guests > 0;
       case 5:
-        return true; // Amenities are optional
+        return true;
       case 6:
         return listing.photos.length >= 1;
       case 7:
@@ -77,30 +130,40 @@ export const HostingWizard = () => {
   const handleNext = async () => {
     if (currentStep === TOTAL_STEPS) {
       setIsPublishing(true);
-      // Simulate publishing
       await new Promise((resolve) => setTimeout(resolve, 2000));
       setIsPublishing(false);
+      localStorage.removeItem(STORAGE_KEY);
       toast.success("Congratulations! Your listing is now live!", {
         description: "Guests can now discover and book your place.",
       });
       navigate("/success");
       return;
     }
-    setCurrentStep((prev) => Math.min(prev + 1, TOTAL_STEPS));
+    setDirection("forward");
+    setIsAnimating(true);
+    setTimeout(() => {
+      setCurrentStep((prev) => Math.min(prev + 1, TOTAL_STEPS));
+      setIsAnimating(false);
+    }, 150);
   };
 
   const handleBack = () => {
-    setCurrentStep((prev) => Math.max(prev - 1, 1));
+    setDirection("backward");
+    setIsAnimating(true);
+    setTimeout(() => {
+      setCurrentStep((prev) => Math.max(prev - 1, 1));
+      setIsAnimating(false);
+    }, 150);
   };
 
-  const toggleAmenity = (amenityId: string) => {
+  const toggleAmenity = useCallback((amenityId: string) => {
     setListing((prev) => ({
       ...prev,
       amenities: prev.amenities.includes(amenityId)
         ? prev.amenities.filter((id) => id !== amenityId)
         : [...prev.amenities, amenityId],
     }));
-  };
+  }, []);
 
   const renderStep = () => {
     switch (currentStep) {
@@ -178,8 +241,15 @@ export const HostingWizard = () => {
     <div className="min-h-screen bg-background flex flex-col">
       <ProgressBar currentStep={currentStep} totalSteps={TOTAL_STEPS} />
       
-      <main className="flex-1 flex items-center justify-center py-12 pb-32 px-6">
-        <div className="w-full max-w-2xl">
+      <main className="flex-1 flex items-center justify-center py-12 pb-32 px-6 overflow-hidden">
+        <div
+          className={cn(
+            "w-full max-w-2xl transition-all duration-300 ease-out",
+            isAnimating && direction === "forward" && "opacity-0 translate-x-8",
+            isAnimating && direction === "backward" && "opacity-0 -translate-x-8",
+            !isAnimating && "opacity-100 translate-x-0"
+          )}
+        >
           {renderStep()}
         </div>
       </main>
