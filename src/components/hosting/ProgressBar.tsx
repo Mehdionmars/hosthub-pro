@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 interface ProgressBarProps {
   currentStep: number;
   totalSteps: number;
+  onStepClick?: (step: number) => void;
 }
 
 const stepLabels = [
@@ -18,8 +19,16 @@ const stepLabels = [
   "Review",
 ];
 
-export const ProgressBar = ({ currentStep, totalSteps }: ProgressBarProps) => {
+export const ProgressBar = ({ currentStep, totalSteps, onStepClick }: ProgressBarProps) => {
   const progress = (currentStep / totalSteps) * 100;
+
+  const handleStepClick = (stepIndex: number) => {
+    const step = stepIndex + 1;
+    // Only allow clicking on completed steps or the current step
+    if (step <= currentStep && onStepClick) {
+      onStepClick(step);
+    }
+  };
 
   return (
     <div className="sticky top-0 z-50 bg-background border-b border-border">
@@ -38,15 +47,17 @@ export const ProgressBar = ({ currentStep, totalSteps }: ProgressBarProps) => {
           {/* Step dots */}
           <div className="hidden md:flex items-center gap-1.5">
             {stepLabels.map((label, index) => (
-              <div
+              <button
                 key={label}
+                onClick={() => handleStepClick(index)}
+                disabled={index + 1 > currentStep}
                 className={cn(
-                  "w-2 h-2 rounded-full transition-all duration-300",
-                  index + 1 < currentStep && "bg-primary",
-                  index + 1 === currentStep && "bg-primary w-6",
-                  index + 1 > currentStep && "bg-muted"
+                  "h-2 rounded-full transition-all duration-300",
+                  index + 1 < currentStep && "bg-primary w-2 cursor-pointer hover:scale-125",
+                  index + 1 === currentStep && "bg-primary w-6 cursor-default",
+                  index + 1 > currentStep && "bg-muted w-2 cursor-not-allowed opacity-50"
                 )}
-                title={label}
+                title={index + 1 <= currentStep ? `Go to ${label}` : label}
               />
             ))}
           </div>
