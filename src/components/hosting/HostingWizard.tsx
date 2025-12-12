@@ -1,10 +1,20 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { ProgressBar } from "./ProgressBar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { ProgressBar, StepStatus } from "./ProgressBar";
 import { NavigationFooter } from "./NavigationFooter";
 import { ListingPreview } from "./ListingPreview";
 import { PropertyTypeStep } from "./steps/PropertyTypeStep";
@@ -18,6 +28,7 @@ import { DescriptionStep } from "./steps/DescriptionStep";
 import { PricingStep } from "./steps/PricingStep";
 import { ReviewStep } from "./steps/ReviewStep";
 import { ListingData } from "@/types/listing";
+
 const TOTAL_STEPS = 10;
 const STORAGE_KEY = "hosting-wizard-progress";
 
@@ -69,6 +80,7 @@ export const HostingWizard = () => {
   const [direction, setDirection] = useState<"forward" | "backward">("forward");
   const [isAnimating, setIsAnimating] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const navigate = useNavigate();
 
   // Save progress to localStorage
@@ -103,8 +115,8 @@ export const HostingWizard = () => {
     }
   }, []);
 
-  const canProceed = (): boolean => {
-    switch (currentStep) {
+  const isStepValid = useCallback((step: number): boolean => {
+    switch (step) {
       case 1:
         return !!listing.propertyType;
       case 2:
@@ -128,7 +140,19 @@ export const HostingWizard = () => {
       default:
         return false;
     }
-  };
+  }, [listing]);
+
+  const canProceed = (): boolean => isStepValid(currentStep);
+
+  const stepStatuses = useMemo((): StepStatus[] => {
+    return Array.from({ length: TOTAL_STEPS }, (_, index) => {
+      const step = index + 1;
+      if (step === currentStep) return "current";
+      if (step > currentStep) return "upcoming";
+      // For visited steps, check if they're valid
+      return isStepValid(step) ? "complete" : "incomplete";
+    });
+  }, [currentStep, isStepValid]);
 
   const handleNext = async () => {
     if (currentStep === TOTAL_STEPS) {
@@ -173,6 +197,11 @@ export const HostingWizard = () => {
   };
 
   const handleSaveDraft = () => {
+    setShowSaveDialog(true);
+  };
+
+  const confirmSaveDraft = () => {
+    setShowSaveDialog(false);
     toast.success("Draft saved!", {
       description: "You can resume your listing anytime.",
     });
@@ -262,7 +291,12 @@ export const HostingWizard = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <ProgressBar currentStep={currentStep} totalSteps={TOTAL_STEPS} onStepClick={handleStepClick} />
+      <ProgressBar 
+        currentStep={currentStep} 
+        totalSteps={TOTAL_STEPS} 
+        stepStatuses={stepStatuses}
+        onStepClick={handleStepClick} 
+      />
       
       {/* Preview Button */}
       {currentStep >= 6 && (
@@ -307,6 +341,24 @@ export const HostingWizard = () => {
         isOpen={showPreview}
         onClose={() => setShowPreview(false)}
       />
+
+      <AlertDialog open={showSaveDialog} onOpenChange={setShowSaveDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Save as draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Your progress will be saved and you can continue editing your listing anytime. 
+              Are you sure you want to exit?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continue editing</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmSaveDraft}>
+              Save and exit
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
