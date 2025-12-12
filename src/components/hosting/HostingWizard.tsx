@@ -159,6 +159,26 @@ export const HostingWizard = () => {
     }, 150);
   };
 
+  const handleStepClick = (step: number) => {
+    if (step < currentStep) {
+      setDirection("backward");
+    } else if (step > currentStep) {
+      setDirection("forward");
+    }
+    setIsAnimating(true);
+    setTimeout(() => {
+      setCurrentStep(step);
+      setIsAnimating(false);
+    }, 150);
+  };
+
+  const handleSaveDraft = () => {
+    toast.success("Draft saved!", {
+      description: "You can resume your listing anytime.",
+    });
+    navigate("/");
+  };
+
   const toggleAmenity = useCallback((amenityId: string) => {
     setListing((prev) => ({
       ...prev,
@@ -242,7 +262,7 @@ export const HostingWizard = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      <ProgressBar currentStep={currentStep} totalSteps={TOTAL_STEPS} />
+      <ProgressBar currentStep={currentStep} totalSteps={TOTAL_STEPS} onStepClick={handleStepClick} />
       
       {/* Preview Button */}
       {currentStep >= 6 && (
@@ -275,6 +295,7 @@ export const HostingWizard = () => {
       <NavigationFooter
         onBack={handleBack}
         onNext={handleNext}
+        onSaveDraft={handleSaveDraft}
         canGoBack={currentStep > 1}
         canGoNext={canProceed()}
         isLastStep={currentStep === TOTAL_STEPS}
