@@ -1,8 +1,12 @@
 import { cn } from "@/lib/utils";
+import { AlertCircle, Check } from "lucide-react";
+
+export type StepStatus = "complete" | "incomplete" | "current" | "upcoming";
 
 interface ProgressBarProps {
   currentStep: number;
   totalSteps: number;
+  stepStatuses?: StepStatus[];
   onStepClick?: (step: number) => void;
 }
 
@@ -19,7 +23,7 @@ const stepLabels = [
   "Review",
 ];
 
-export const ProgressBar = ({ currentStep, totalSteps, onStepClick }: ProgressBarProps) => {
+export const ProgressBar = ({ currentStep, totalSteps, stepStatuses, onStepClick }: ProgressBarProps) => {
   const progress = (currentStep / totalSteps) * 100;
 
   const handleStepClick = (stepIndex: number) => {
@@ -28,6 +32,15 @@ export const ProgressBar = ({ currentStep, totalSteps, onStepClick }: ProgressBa
     if (step <= currentStep && onStepClick) {
       onStepClick(step);
     }
+  };
+
+  const getStepStatus = (index: number): StepStatus => {
+    if (stepStatuses && stepStatuses[index]) {
+      return stepStatuses[index];
+    }
+    if (index + 1 < currentStep) return "complete";
+    if (index + 1 === currentStep) return "current";
+    return "upcoming";
   };
 
   return (
@@ -46,20 +59,30 @@ export const ProgressBar = ({ currentStep, totalSteps, onStepClick }: ProgressBa
           
           {/* Step dots */}
           <div className="hidden md:flex items-center gap-1.5">
-            {stepLabels.map((label, index) => (
-              <button
-                key={label}
-                onClick={() => handleStepClick(index)}
-                disabled={index + 1 > currentStep}
-                className={cn(
-                  "h-2 rounded-full transition-all duration-300",
-                  index + 1 < currentStep && "bg-primary w-2 cursor-pointer hover:scale-125",
-                  index + 1 === currentStep && "bg-primary w-6 cursor-default",
-                  index + 1 > currentStep && "bg-muted w-2 cursor-not-allowed opacity-50"
-                )}
-                title={index + 1 <= currentStep ? `Go to ${label}` : label}
-              />
-            ))}
+            {stepLabels.map((label, index) => {
+              const status = getStepStatus(index);
+              return (
+                <button
+                  key={label}
+                  onClick={() => handleStepClick(index)}
+                  disabled={index + 1 > currentStep}
+                  className={cn(
+                    "h-2 rounded-full transition-all duration-300 flex items-center justify-center",
+                    status === "complete" && "bg-primary w-2 cursor-pointer hover:scale-125",
+                    status === "incomplete" && "bg-destructive w-2 cursor-pointer hover:scale-125",
+                    status === "current" && "bg-primary w-6 cursor-default",
+                    status === "upcoming" && "bg-muted w-2 cursor-not-allowed opacity-50"
+                  )}
+                  title={
+                    status === "incomplete" 
+                      ? `${label} - Incomplete` 
+                      : index + 1 <= currentStep 
+                        ? `Go to ${label}` 
+                        : label
+                  }
+                />
+              );
+            })}
           </div>
         </div>
       </div>
