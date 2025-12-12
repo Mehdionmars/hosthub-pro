@@ -27,6 +27,7 @@ import { TitleStep } from "./steps/TitleStep";
 import { DescriptionStep } from "./steps/DescriptionStep";
 import { PricingStep } from "./steps/PricingStep";
 import { ReviewStep } from "./steps/ReviewStep";
+import { IntroStep } from "./steps/IntroStep";
 import { ListingData } from "@/types/listing";
 
 const TOTAL_STEPS = 10;
@@ -74,6 +75,7 @@ const loadSavedProgress = (): { step: number; listing: ListingData } | null => {
 
 export const HostingWizard = () => {
   const savedProgress = loadSavedProgress();
+  const [showIntro, setShowIntro] = useState(!savedProgress);
   const [currentStep, setCurrentStep] = useState(savedProgress?.step || 1);
   const [listing, setListing] = useState<ListingData>(savedProgress?.listing || initialListingData);
   const [isPublishing, setIsPublishing] = useState(false);
@@ -82,6 +84,14 @@ export const HostingWizard = () => {
   const [showPreview, setShowPreview] = useState(false);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const navigate = useNavigate();
+
+  const handleStartWizard = () => {
+    setShowIntro(false);
+  };
+
+  if (showIntro) {
+    return <IntroStep onStart={handleStartWizard} />;
+  }
 
   // Save progress to localStorage
   useEffect(() => {
